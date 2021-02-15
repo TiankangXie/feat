@@ -103,6 +103,7 @@ class Detector(object):
                 print('Use PFLD as backbone')
                 self.landmark_detector.load_state_dict(checkpoint['state_dict'])
                 # or download from https://drive.google.com/file/d/1T8J73UTcB25BEJ_ObAJczCkyGKW5VaeY/view?usp=sharing
+                
             elif landmark_model.lower() == 'mobilefacenet':
                 self.landmark_detector = MobileFaceNet([112, 112], 136)
                 checkpoint = torch.load(os.path.join(get_resource_path(),'mobilefacenet_model_best.pth.tar'), map_location=self.map_location)
