@@ -1,4 +1,3 @@
-# %%
 from __future__ import division
 
 """Functions to help detect face, landmarks, emotions, action units from images and videos"""
