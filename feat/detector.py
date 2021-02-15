@@ -12,19 +12,18 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw
 import cv2
-import feat
 from feat.data import Fex
 from feat.utils import get_resource_path, face_rect_to_coords, openface_2d_landmark_columns, jaanet_AU_presence, FEAT_EMOTION_MAPPER, FEAT_EMOTION_COLUMNS, FEAT_FACEBOX_COLUMNS, FEAT_TIME_COLUMNS, FACET_TIME_COLUMNS, BBox, convert68to49
-from feat.models.JAA_test import JAANet
+from feat.au_detectors.JAANet.JAANet_test import JAANet
 from feat.au_detectors.DRML.DRML_test import DRMLNet
 from feat.emo_detectors.ferNet.ferNet_test import ferNetModule
 import torch
-from feat.face_detectors.FaceBoxes import FaceBoxes
-from feat.face_detectors.Retinaface import Retinaface
-from feat.face_detectors.MTCNN import MTCNN
-from feat.landmark_detectors.basenet import MobileNet_GDConv
-from feat.landmark_detectors.pfld_compressed import PFLDInference
-from feat.landmark_detectors.mobilefacenet import MobileFaceNet
+from feat.face_detectors.FaceBoxes.FaceBoxes_test import FaceBoxes
+from feat.face_detectors.MTCNN.MTCNN_test import MTCNN
+from feat.face_detectors.Retinaface import Retinaface_test
+from feat.landmark_detectors.basenet_test import MobileNet_GDConv
+from feat.landmark_detectors.pfld_compressed_test import PFLDInference
+from feat.landmark_detectors.mobilefacenet_test import MobileFaceNet
 
 
 class Detector(object):
@@ -72,7 +71,7 @@ class Detector(object):
             if face_model.lower() == "faceboxes":
                 self.face_detector = FaceBoxes()
             elif face_model.lower() == "retinaface":
-                self.face_detector = Retinaface.Retinaface()
+                self.face_detector = Retinaface_test.Retinaface()
             elif face_model.lower() == 'mtcnn':
                 self.face_detector = MTCNN()
 
@@ -93,22 +92,21 @@ class Detector(object):
                 self.landmark_detector = MobileNet_GDConv(136)
                 self.landmark_detector = torch.nn.DataParallel(
                     self.landmark_detector)
-                # download model from https://drive.google.com/file/d/1Le5UdpMkKOTRr1sTp4lwkw8263sbgdSe/view?usp=sharing
-                #CHANGEME
-                checkpoint = torch.load(os.path.join(feat.__path__[0], 'landmark_detectors/weights/mobilenet_224_model_best_gdconv_external.pth.tar'), map_location=self.map_location)
+                # or download model from https://drive.google.com/file/d/1Le5UdpMkKOTRr1sTp4lwkw8263sbgdSe/view?usp=sharing
+                checkpoint = torch.load(os.path.join(get_resource_path(), 'mobilenet_224_model_best_gdconv_external.pth.tar'), map_location=self.map_location)
                 print('Use MobileNet as backbone')
                 self.landmark_detector.load_state_dict(checkpoint['state_dict'])
 
             elif landmark_model.lower() == 'pfld':
                 self.landmark_detector = PFLDInference()
-                # download from https://drive.google.com/file/d/1gjgtm6qaBQJ_EY7lQfQj3EuMJCVg9lVu/view?usp=sharing
-                checkpoint = torch.load(os.path.join(feat.__path__[0],'landmark_detectors/weights/pfld_model_best.pth.tar'), map_location=self.map_location)
+                # or download from https://drive.google.com/file/d/1gjgtm6qaBQJ_EY7lQfQj3EuMJCVg9lVu/view?usp=sharing
+                checkpoint = torch.load(os.path.join(get_resource_path(),'pfld_model_best.pth.tar'), map_location=self.map_location)
                 print('Use PFLD as backbone')
                 self.landmark_detector.load_state_dict(checkpoint['state_dict'])
-                # download from https://drive.google.com/file/d/1T8J73UTcB25BEJ_ObAJczCkyGKW5VaeY/view?usp=sharing
+                # or download from https://drive.google.com/file/d/1T8J73UTcB25BEJ_ObAJczCkyGKW5VaeY/view?usp=sharing
             elif landmark_model.lower() == 'mobilefacenet':
                 self.landmark_detector = MobileFaceNet([112, 112], 136)
-                checkpoint = torch.load(os.path.join(feat.__path__[0],'landmark_detectors/weights/mobilefacenet_model_best.pth.tar'), map_location=self.map_location)
+                checkpoint = torch.load(os.path.join(get_resource_path(),'mobilefacenet_model_best.pth.tar'), map_location=self.map_location)
                 print('Use MobileFaceNet as backbone')
                 self.landmark_detector.load_state_dict(checkpoint['state_dict'])
 
@@ -290,32 +288,6 @@ class Detector(object):
 
             emo_pred = self.emo_detect(frame=frame, facebox=detected_faces)
             emo_pred_df = pd.DataFrame(emo_pred, columns = FEAT_EMOTION_COLUMNS, index=[counter])
-            # TODO: Modularize Emotion Detection Model
-            # crop just the face area
-            # if detected_faces.shape[0] > 0:
-            #     facebox_df = pd.DataFrame([detected_faces[0]], columns = self["face_detection_columns"], index=[counter])
-            #     grayscale_cropped_face = Image.fromarray(grayscale_image).crop(face_rect_to_coords(detected_faces[0]))
-            #     # resize face to newsize 48 x 48
-            #     # print("resizeface", grayscale_cropped_face.shape, img_w, img_h, img_c)
-            #     grayscale_cropped_resized_face = grayscale_cropped_face.resize((self['input_shape']["img_w"], self['input_shape']["img_h"]))
-            #     # reshape to put in model
-            #     grayscale_cropped_resized_reshaped_face = np.array(grayscale_cropped_resized_face).reshape(1, self['input_shape']["img_w"], self['input_shape']["img_h"], self['input_shape']["img_c"])
-            #     # normalize
-            #     normalize_grayscale_cropped_resized_reshaped_face = grayscale_cropped_resized_reshaped_face/255.
-            #     # make tensor
-            #     tensor_img = tf.convert_to_tensor(normalize_grayscale_cropped_resized_reshaped_face)
-            #     # make predictions
-            #     predictions = self.emotion_model.predict(tensor_img)
-            #     emotion_df = pd.DataFrame(predictions, columns = self["mapper"].values(), index=[counter])
-
-                #=======================AU prediction==================================
-            #if raw_landmarks is not None:
-            #    au_landmarks = raw_landmarks
-            #else:
-            #    au_landmarks = convert68to49(landmarks[0][0]).flatten()
-
-            #au_df = pd.DataFrame(self.au_model.detect_au(frame,au_landmarks), columns = ["1","2","4","6","7","10","12","14","15","17","23","24"], index=[counter])
-            #emotion_df, 
             out = pd.concat([facebox_df, landmarks_df, au_occur_df, emo_pred_df], axis=1)
             out[FEAT_TIME_COLUMNS] = counter
             return out
@@ -417,7 +389,7 @@ class Detector(object):
             return init_df
 
     def detect_image(self, inputFname, outputFname=None):
-        #TODO: update emotion model
+        
         """Detects FEX from a video file.
         Args:
             inputFname (str, or list of str): Path to image file or a list of paths to image files.
@@ -459,7 +431,7 @@ class Detector(object):
 
 # %%
 # Test case:
-
+# if __name__ == '__main__':
 # A01 = Detector(face_model='RetinaFace',emotion_model=None, landmark_model = "MobileFaceNet")
 # test_img = cv2.imread("F:/test_case/0010.jpg")
 # bboxes = A01.face_detect(test_img)
@@ -484,9 +456,6 @@ class Detector(object):
 # bboxes = A01.face_detect(test_img)
 # lands = A01.landmark_detect(test_img,bboxes)
 # aus = A01.au_occur_detect(test_img,lands)
-
-if __name__ == '__main__':
-    A01 = Detector(face_model='RetinaFace',emotion_model='fer', landmark_model="MobileFaceNet", au_occur_model='jaanet')
-    test_img = cv2.imread("F:/test_case/0010.jpg")
-    ress = A01.process_frame(frame=test_img)
-# %%
+# A01 = Detector(face_model='RetinaFace',emotion_model='fer', landmark_model="MobileFaceNet", au_occur_model='jaanet')
+# test_img = cv2.imread("F:/test_case/0010.jpg")
+# ress = A01.process_frame(frame=test_img)
