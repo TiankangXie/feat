@@ -33,7 +33,7 @@ class ferNetModule(nn.Module):
         img_pil = Image.fromarray(imgs)
         grayscale_image = ImageOps.grayscale(img_pil)
         grayscale_cropped_face = grayscale_image.crop(
-            face_rect_to_coords(detected_face[0]))
+            face_rect_to_coords(detected_face))
         grayscale_cropped_resized_face = grayscale_cropped_face.resize(
             (img_w, img_h))
         grayscale_cropped_resized_reshaped_face = np.array(

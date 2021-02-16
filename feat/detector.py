@@ -1,3 +1,4 @@
+# %%
 from __future__ import division
 
 """Functions to help detect face, landmarks, emotions, action units from images and videos"""
@@ -5,7 +6,6 @@ from __future__ import division
 from collections import deque
 from multiprocessing.pool import ThreadPool
 import tensorflow as tf
-from tensorflow.python.keras import optimizers, models
 import os
 import numpy as np
 import pandas as pd
@@ -119,7 +119,6 @@ class Detector(object):
         empty_landmarks = pd.DataFrame(predictions, columns=landmark_columns)
         self._empty_landmark = empty_landmarks
 
-
         print("Loading au occurence model: ", au_occur_model)
         self.info['AU_Occur_Model'] = au_occur_model
         if au_occur_model:
@@ -136,8 +135,6 @@ class Detector(object):
         predictions[:] = np.nan
         empty_au_occurs = pd.DataFrame(predictions, columns=auoccur_columns)
         self._empty_auoccurence = empty_au_occurs
-
-
 
         print("Loading emotion model: ", emotion_model)
         self.info['Emo_Model'] = emotion_model
@@ -189,6 +186,8 @@ class Detector(object):
 
         height, width, _ = frame.shape
         landmark_list = []
+        if not isinstance(detected_faces[0],list):
+            detected_faces = [detected_faces]
 
         for k, face in enumerate(detected_faces):
             x1 = face[0]
@@ -224,7 +223,7 @@ class Detector(object):
             cropped_face = cv2.resize(cropped, (out_size, out_size))
 
             if cropped_face.shape[0] <= 0 or cropped_face.shape[1] <= 0:
-                continue
+                continue;
             test_face = cropped_face.copy()
             test_face = test_face/255.0
             if self.info['landmark_model']:
@@ -272,36 +271,43 @@ class Detector(object):
             >> detector = Detector()
             >> detector.process_frame(np.array(frame))
         """
-        # How you would use MTCNN in this case:
-        # my_model.detect(img = im01,landmarks=False)[0] will return a bounding box array of shape (1,4)
+        #try:
+        out = None
+        detected_faces = self.face_detect(frame=frame)
 
-        try:
-            # detect faces
-            detected_faces = self.face_detect(frame=frame)
-            facebox_df = pd.DataFrame([[detected_faces[0][0], detected_faces[0][1], detected_faces[0][2] - detected_faces[0][0], detected_faces[0][3] - detected_faces[0][1]]], columns = self["face_detection_columns"], index=[counter])
+        for i, faces in enumerate(detected_faces):
+            facebox_df = pd.DataFrame([[faces[0], faces[1], faces[2] - faces[0], faces[3] - faces[1]]], columns = self["face_detection_columns"], index=[counter+i])
             # detect landmarks
-            landmarks = self.landmark_detect(frame=frame, detected_faces=detected_faces[0:4])
-            landmarks_df = pd.DataFrame([landmarks[0].flatten(order="F")], columns = self["face_landmark_columns"], index=[counter])
+            landmarks = self.landmark_detect(frame=frame, detected_faces=faces[0:4])
+            landmarks_df = pd.DataFrame([landmarks[0].flatten(order="F")], columns = self["face_landmark_columns"], index=[counter+i])
             # detect AUs
             au_occur = self.au_occur_detect(frame=frame, landmarks=landmarks)
-            au_occur_df = pd.DataFrame(au_occur, columns = self["au_presence_columns"], index = [counter])
+            au_occur_df = pd.DataFrame(au_occur, columns = self["au_presence_columns"], index = [counter+i])
 
-            emo_pred = self.emo_detect(frame=frame, facebox=detected_faces)
-            emo_pred_df = pd.DataFrame(emo_pred, columns = FEAT_EMOTION_COLUMNS, index=[counter])
-            out = pd.concat([facebox_df, landmarks_df, au_occur_df, emo_pred_df], axis=1)
-            out[FEAT_TIME_COLUMNS] = counter
-            return out
+            emo_pred = self.emo_detect(frame=frame, facebox=faces)
+            emo_pred_df = pd.DataFrame(emo_pred, columns = FEAT_EMOTION_COLUMNS, index=[counter+i])
+
+            #frame_df = pd.DataFrame([counter], columns=['Frame'], index=[counter+i])
+            tmp_df = pd.concat([facebox_df, landmarks_df, au_occur_df, emo_pred_df], axis=1)
+
+            if out is None:
+                out = tmp_df
+            else:
+                out = pd.concat([out,tmp_df],axis=0)
+
+        out[FEAT_TIME_COLUMNS] = counter
+        return out
         
-        except:
-            print("exception occurred")
-            emotion_df = self._empty_emotion.reindex(index=[counter])
-            facebox_df = self._empty_facebox.reindex(index=[counter])
-            landmarks_df = self._empty_landmark.reindex(index=[counter])
-            au_occur_df = self._empty_auoccurence.reindex(index=[counter])
+        # except:
+        #     print("exception occurred")
+        #     emotion_df = self._empty_emotion.reindex(index=[counter])
+        #     facebox_df = self._empty_facebox.reindex(index=[counter])
+        #     landmarks_df = self._empty_landmark.reindex(index=[counter])
+        #     au_occur_df = self._empty_auoccurence.reindex(index=[counter])
     
-            out = pd.concat([facebox_df, landmarks_df, au_occur_df, emotion_df], axis=1)
-            out[FEAT_TIME_COLUMNS] = counter
-            return out
+        #     out = pd.concat([facebox_df, landmarks_df, au_occur_df, emotion_df], axis=1)
+        #     out[FEAT_TIME_COLUMNS] = counter
+        #     return out
 
 
     def detect_video(self, inputFname, outputFname=None, skip_frames=1, verbose=False):
@@ -425,37 +431,38 @@ class Detector(object):
         if outputFname:
             return True
         else:
-            #return Fex(init_df, filename=inputFname, au_columns=None, emotion_columns=FEAT_EMOTION_COLUMNS, facebox_columns=FEAT_FACEBOX_COLUMNS, landmark_columns=openface_2d_landmark_columns, time_columns=FACET_TIME_COLUMNS, detector="Feat")
-            return Fex(init_df, filename=inputFname, au_columns=jaanet_AU_presence, facebox_columns=FEAT_FACEBOX_COLUMNS, landmark_columns=openface_2d_landmark_columns, time_columns=FACET_TIME_COLUMNS, detector="Feat")
+            return Fex(init_df, filename=inputFname, au_columns=jaanet_AU_presence, emotion_columns=FEAT_EMOTION_COLUMNS, facebox_columns=FEAT_FACEBOX_COLUMNS, landmark_columns=openface_2d_landmark_columns, time_columns=FACET_TIME_COLUMNS, detector="Feat")
 
 
 # %%
 # Test case:
 # if __name__ == '__main__':
-# A01 = Detector(face_model='RetinaFace',emotion_model=None, landmark_model = "MobileFaceNet")
-# test_img = cv2.imread("F:/test_case/0010.jpg")
-# bboxes = A01.face_detect(test_img)
-# x,y,w,h,_ = bboxes[0]
-# x = int(x)
-# y = int(y)
-# w = int(w)
-# h = int(h)
-# cv2.rectangle(test_img,(x,y),(w,h),(0,255,0),2)
-# cv2.putText(test_img,'Moth Detected',(w+10,h),0,0.3,(0,255,0))
-# cv2.imshow("Show",test_img)
-# cv2.waitKey()
-# cv2.destroyAllWindows()
-#b_box_ = BBox(bboxes[0])
-# kruska0 = A01.landmark_detect(test_img,bboxes)
-# A01.landmark_detect()
-# imm00 = drawLandmark(test_img,b_box_,kruska0)
-# cv2.imshow('image',imm00)
-# cv2.waitKey(0)
+    # A01 = Detector(face_model='RetinaFace',emotion_model=None, landmark_model = "MobileFaceNet")
+    # test_img = cv2.imread("F:/test_case/0010.jpg")
+    # bboxes = A01.face_detect(test_img)
+    # x,y,w,h,_ = bboxes[0]
+    # x = int(x)
+    # y = int(y)
+    # w = int(w)
+    # h = int(h)
+    # cv2.rectangle(test_img,(x,y),(w,h),(0,255,0),2)
+    # cv2.putText(test_img,'Moth Detected',(w+10,h),0,0.3,(0,255,0))
+    # cv2.imshow("Show",test_img)
+    # cv2.waitKey()
+    # cv2.destroyAllWindows()
+    #b_box_ = BBox(bboxes[0])
+    # kruska0 = A01.landmark_detect(test_img,bboxes)
+    # A01.landmark_detect()
+    # imm00 = drawLandmark(test_img,b_box_,kruska0)
+    # cv2.imshow('image',imm00)
+    # cv2.waitKey(0)
 
-# test_img = cv2.imread("F:/test_case/0010.jpg")
-# bboxes = A01.face_detect(test_img)
-# lands = A01.landmark_detect(test_img,bboxes)
-# aus = A01.au_occur_detect(test_img,lands)
-# A01 = Detector(face_model='RetinaFace',emotion_model='fer', landmark_model="MobileFaceNet", au_occur_model='jaanet')
-# test_img = cv2.imread("F:/test_case/0010.jpg")
-# ress = A01.process_frame(frame=test_img)
+    # test_img = cv2.imread("F:/test_case/0010.jpg")
+    # bboxes = A01.face_detect(test_img)
+    # lands = A01.landmark_detect(test_img,bboxes)
+    # aus = A01.au_occur_detect(test_img,lands)
+    #=============newtest========================================
+    # A01 = Detector(face_model='RetinaFace',emotion_model='fer', landmark_model="MobileFaceNet", au_occur_model='jaanet')
+    # test_img = cv2.imread(r"C:\Users\Yaqian\src\py-feat\feat\tests\data\input.jpg")
+    # ress = A01.process_frame(frame=test_img)
+    # print(ress)
