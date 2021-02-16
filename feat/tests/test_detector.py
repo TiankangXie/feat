@@ -42,7 +42,9 @@ import numpy as np
 #     assert os.path.exists(landmark_model_path)==True
 
 inputFname = os.path.join(get_test_data_path(), "sampler0000.jpg")
+inputFname2 = os.path.join(get_test_data_path(), "professors.jpg")
 img01 = cv2.imread(inputFname)
+img02 = cv2.imread(inputFname2)
 h, w, _ = img01.shape
 
 def test_detector():
@@ -172,6 +174,12 @@ def test_detect_video_parallel():
     # assert os.path.exists(outputFname)
     # out = pd.read_csv(outputFname)
     # assert out.happiness.values.max() > 0
+
+def test_multiface():
+    # Test processing multiface:
+    detector04 = Detector(face_model='RetinaFace', emotion_model='fer', landmark_model="PFLD", au_occur_model='jaanet')
+    files = detector04.process_frame(img02,0)
+    assert files.shape[0] == 3
 
 def test_simultaneous():
     # Test processing everything:
